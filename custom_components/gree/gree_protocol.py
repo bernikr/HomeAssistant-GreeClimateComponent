@@ -172,6 +172,20 @@ async def FetchResult(cipher, ip_addr, port, json_data, encryption_version=1, ma
                 state, details = await asyncio.get_event_loop().run_in_executor(
                     None, _classify_unreachable, ip_addr, port
                 )
+                if max_retries == 1:
+                    # Single attempt: the liveness poll for a unit that is
+                    # expected to be offline (unplugged portable unit, or not
+                    # yet seen since startup). Whatever the reason -- silent,
+                    # refused, or answering discovery while its encrypted
+                    # service is still coming up after power-on -- this is the
+                    # expected state, not a fault, so it stays at INFO and the
+                    # next poll tries again. Commands and polls of a unit that
+                    # is online keep the detailed errors below.
+                    _LOGGER.info(
+                        f"{ip_addr}:{port} not answering ({state}); next poll will retry. "
+                        f"Original error: {error_msg}"
+                    )
+                    raise
                 if state == "refused":
                     _LOGGER.error(
                         f"All {max_retries} attempts failed for {ip_addr}:{port}. The device "
@@ -191,10 +205,11 @@ async def FetchResult(cipher, ip_addr, port, json_data, encryption_version=1, ma
                         f"Original error: {error_msg}"
                     )
                 else:
-                    # An unreachable portable unit is its normal state, not a
-                    # fault. Keep this at INFO so error/warning dashboards and
-                    # alerts stay meaningful; protocol/auth failures below stay
-                    # at ERROR.
+                    # No response of any kind from a unit that is supposed to
+                    # be online: wrong IP, a firewall or VLAN in the way, a
+                    # unit that dropped off, or cloud-only firmware. INFO keeps
+                    # error/warning dashboards meaningful; refused and responded
+                    # stay ERROR.
                     _LOGGER.info(
                         f"All {max_retries} attempts failed for {ip_addr}:{port}. No response of "
                         f"any kind ({state}) -- wrong IP address, a firewall or VLAN in the way, "
