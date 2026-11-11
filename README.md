@@ -3,10 +3,11 @@
 > **This is a fork.** `bernikr/HomeAssistant-GreeClimateComponent` is
 > `RobHofmann/HomeAssistant-GreeClimateComponent` plus a small patch on `master`
 > that quiets polling for a portable unit that is unplugged most of the time:
-> 5-minute scan interval, a single poll attempt while the unit is known offline or
-> has not been confirmed online yet, and one-off warnings instead of one per poll.
-> Commands still use the upstream retry budget.
-> Tags keep the upstream version plus a patch revision (`4.0.16.1`). A scheduled
+> a poll uses at most two attempts (one while the unit is known offline or has not
+> been confirmed online yet) instead of the full retry budget, and an expected
+> offline unit logs one warning instead of one per poll. Commands still use the
+> full budget.
+> Tags keep the upstream version plus a patch revision (`4.0.16.2`). A scheduled
 > workflow merges each upstream release and publishes the matching fork release.
 > Nothing here is meant for upstream; see the repository's release notes for the diff.
 

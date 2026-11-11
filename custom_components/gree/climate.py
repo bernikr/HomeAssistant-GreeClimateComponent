@@ -107,13 +107,8 @@ async def create_gree_device(hass, config):
 
 # from the remote control and gree app
 
-# update() interval.
-# A portable unit that is unplugged for long stretches does not need to be
-# asked for its state every minute: commands are sent immediately and a
-# refresh is scheduled after each command. Five minutes keeps the entity
-# current while the unit runs and cuts the offline poll rate (and its log
-# volume) by 5x.
-SCAN_INTERVAL = timedelta(seconds=300)
+# update() interval
+SCAN_INTERVAL = timedelta(seconds=60)
 
 # After this many consecutive update failures, discard the cached encryption
 # key so the next update re-binds. Recovers from device-side key rotation
@@ -826,14 +821,14 @@ class GreeClimate(ClimateEntity):
     async def async_update(self):
         """Retrieve latest state."""
         _LOGGER.debug("async_update()")
-        # A unit already known to be offline is almost certainly just
-        # unplugged. Probe it with a single attempt instead of the full retry
-        # budget: the update then finishes in a few seconds (well below HA's
-        # 10-second slow-update warning) and the unit is still noticed as soon
-        # as it comes back. The same applies on startup, before a poll has
-        # confirmed it is online. While it is running, the normal 8 attempts
-        # apply, and commands always use the full budget.
-        retries = 8 if self._device_online is True else 1
+        # Polling never needs the full retry budget: the next scan follows a
+        # minute later anyway, so a retry only delays the moment the unit is
+        # marked unavailable. Two attempts while it is online tolerate a lost
+        # packet, one while it is already known offline (or not yet confirmed
+        # online since startup) keeps the update to a few seconds -- well below
+        # HA's 10-second slow-update warning, including the diagnostic probe.
+        # Commands are the path that needs all 8 attempts and still gets them.
+        retries = 2 if self._device_online is True else 1
         if not self._encryption_key:
             if self.encryption_version == 1:
                 key = await GetDeviceKey(self._mac_addr, self._ip_addr, self._port, max_retries=retries)

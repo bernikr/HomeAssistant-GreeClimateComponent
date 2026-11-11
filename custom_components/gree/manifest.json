@@ -1,7 +1,7 @@
 {
   "domain": "gree",
   "name": "Gree A/C",
-  "version": "4.0.16.1",
+  "version": "4.0.16.2",
   "documentation": "https://github.com/bernikr/HomeAssistant-GreeClimateComponent",
   "dependencies": [],
   "codeowners": [
