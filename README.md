@@ -1,5 +1,14 @@
 [![hacs_badge](https://img.shields.io/badge/HACS-Default-orange.svg?style=for-the-badge)](https://github.com/hacs/integration) [![Join our Discord](https://img.shields.io/badge/Discord-Join%20the%20chat-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/JPcBkvRhTS)
 
+> **This is a fork.** `bernikr/HomeAssistant-GreeClimateComponent` is
+> `RobHofmann/HomeAssistant-GreeClimateComponent` (release 4.0.16) plus one commit,
+> on the `proklima-offline-noise` branch, that quiets polling for a portable unit
+> that is unplugged most of the time: 5-minute scan interval, a single poll attempt
+> while the unit is known offline or has not been confirmed online yet, and one-off
+> warnings instead of one per poll. Commands still use the upstream retry budget.
+> Tags keep the upstream version plus a patch revision (`4.0.16.1`). Nothing here is
+> meant for upstream; see the repository's release notes for the diff.
+
 # HomeAssistant-GreeClimateComponent
 Custom Gree climate component written in Python3 for Home Assistant. Controls ACs supporting the Gree protocol.
 

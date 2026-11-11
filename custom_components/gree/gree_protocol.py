@@ -191,7 +191,11 @@ async def FetchResult(cipher, ip_addr, port, json_data, encryption_version=1, ma
                         f"Original error: {error_msg}"
                     )
                 else:
-                    _LOGGER.error(
+                    # An unreachable portable unit is its normal state, not a
+                    # fault. Keep this at INFO so error/warning dashboards and
+                    # alerts stay meaningful; protocol/auth failures below stay
+                    # at ERROR.
+                    _LOGGER.info(
                         f"All {max_retries} attempts failed for {ip_addr}:{port}. No response of "
                         f"any kind ({state}) -- wrong IP address, a firewall or VLAN in the way, "
                         f"the device is offline, or a cloud-only WiFi module that drops the "

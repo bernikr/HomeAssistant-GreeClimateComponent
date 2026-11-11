@@ -107,8 +107,13 @@ async def create_gree_device(hass, config):
 
 # from the remote control and gree app
 
-# update() interval
-SCAN_INTERVAL = timedelta(seconds=60)
+# update() interval.
+# A portable unit that is unplugged for long stretches does not need to be
+# asked for its state every minute: commands are sent immediately and a
+# refresh is scheduled after each command. Five minutes keeps the entity
+# current while the unit runs and cuts the offline poll rate (and its log
+# volume) by 5x.
+SCAN_INTERVAL = timedelta(seconds=300)
 
 # After this many consecutive update failures, discard the cached encryption
 # key so the next update re-binds. Recovers from device-side key rotation
@@ -283,7 +288,7 @@ class GreeClimate(ClimateEntity):
         # helper method to determine TemSen offset
         self._process_temp_sensor = TempOffsetResolver()
 
-    async def GreeGetValues(self, propertyNames):
+    async def GreeGetValues(self, propertyNames, max_retries=8):
         plaintext = '{"cols":' + simplejson.dumps(propertyNames) + ',"mac":"' + str(self._sub_mac_addr) + '","t":"status"}'
         if self.encryption_version == 1:
             cipher = self.CIPHER
@@ -292,7 +297,7 @@ class GreeClimate(ClimateEntity):
             pack, tag = EncryptGCM(self._encryption_key, plaintext)
             jsonPayloadToSend = '{"cid":"app","i":0,"pack":"' + pack + '","t":"pack","tcid":"' + str(self._mac_addr) + '","uid":{}'.format(self._uid) + ',"tag" : "' + tag + '"}'
             cipher = GetGCMCipher(self._encryption_key)
-        result = await FetchResult(cipher, self._ip_addr, self._port, jsonPayloadToSend, encryption_version=self.encryption_version)
+        result = await FetchResult(cipher, self._ip_addr, self._port, jsonPayloadToSend, encryption_version=self.encryption_version, max_retries=max_retries)
 
         if not result["dat"]:
             return None
@@ -546,14 +551,19 @@ class GreeClimate(ClimateEntity):
         self._consecutive_update_failures += 1
         if self._consecutive_update_failures < STALE_KEY_THRESHOLD:
             return
+        # A unit that is known to be offline is unplugged, not rotating its
+        # key, so this routine bookkeeping is not worth a warning every few
+        # polls. Keep the warning for a unit that still reports as online,
+        # where a stale key is the more likely explanation.
+        level = _LOGGER.debug if self._device_online is False else _LOGGER.warning
         if self._user_provided_key:
-            _LOGGER.warning(
+            level(
                 f"{self._name}: {self._consecutive_update_failures} consecutive update failures "
                 f"with a user-configured encryption key. Not auto-clearing; reload the integration "
                 f"or update the key in options if the device has rotated its key."
             )
             return
-        _LOGGER.warning(
+        level(
             f"{self._name}: {self._consecutive_update_failures} consecutive update failures; "
             f"discarding cached encryption key to trigger re-bind on next update."
         )
@@ -561,14 +571,14 @@ class GreeClimate(ClimateEntity):
         self.CIPHER = None
         self._consecutive_update_failures = 0
 
-    async def SyncState(self, acOptions={}):
+    async def SyncState(self, acOptions={}, max_retries=8):
         # Fetch current settings from HVAC
         _LOGGER.debug(f"{self._name}: Starting device state sync")
 
         # Probe the optional Celsius half-degree field before adding it to polls.
         if self._has_half_degree_option is None:
             try:
-                half_bit = await self.GreeGetValues(["Add0.5"])
+                half_bit = await self.GreeGetValues(["Add0.5"], max_retries=max_retries)
             except Exception:
                 _LOGGER.debug("Could not query Add0.5; retrying at the next update")
             else:
@@ -581,7 +591,7 @@ class GreeClimate(ClimateEntity):
         if self._has_temp_sensor is None:
             _LOGGER.debug("Attempt to check whether device has an built-in temperature sensor")
             try:
-                temp_sensor = await self.GreeGetValues(["TemSen"])
+                temp_sensor = await self.GreeGetValues(["TemSen"], max_retries=max_retries)
             except Exception:
                 _LOGGER.debug("Could not determine whether device has an built-in temperature sensor. Retrying at next update()")
             else:
@@ -598,7 +608,7 @@ class GreeClimate(ClimateEntity):
         if self._has_auxiliary_heat is None:
             _LOGGER.debug("Attempt to check whether device has auxiliary heat")
             try:
-                auxiliary_heat = await self.GreeGetValues(["AssHt"])
+                auxiliary_heat = await self.GreeGetValues(["AssHt"], max_retries=max_retries)
             except Exception:
                 _LOGGER.debug("Could not determine whether device has auxiliary heat. Retrying at next update()")
             else:
@@ -614,7 +624,7 @@ class GreeClimate(ClimateEntity):
         if self._has_anti_direct_blow is None:
             _LOGGER.debug("Attempt to check whether device has an anti direct blow feature")
             try:
-                anti_direct_blow = await self.GreeGetValues(["AntiDirectBlow"])
+                anti_direct_blow = await self.GreeGetValues(["AntiDirectBlow"], max_retries=max_retries)
             except Exception:
                 _LOGGER.debug("Could not determine whether device has an anti direct blow feature. Retrying at next update()")
             else:
@@ -631,7 +641,7 @@ class GreeClimate(ClimateEntity):
         if self._has_light_sensor is None:
             _LOGGER.debug("Attempt to check whether device has a built-in light sensor")
             try:
-                light_sensor = await self.GreeGetValues(["LigSen"])
+                light_sensor = await self.GreeGetValues(["LigSen"], max_retries=max_retries)
             except Exception:
                 _LOGGER.debug("Could not determine whether device has a built-in light sensor. Retrying at next update()")
             else:
@@ -648,7 +658,7 @@ class GreeClimate(ClimateEntity):
         if self._has_outside_temp_sensor is None:
             _LOGGER.debug("Attempt to check whether device has an outside temperature sensor")
             try:
-                outside_temp_sensor = await self.GreeGetValues(["OutEnvTem"])
+                outside_temp_sensor = await self.GreeGetValues(["OutEnvTem"], max_retries=max_retries)
             except Exception:
                 _LOGGER.debug("Could not determine whether device has an outside temperature sensor. Retrying at next update()")
             else:
@@ -665,7 +675,7 @@ class GreeClimate(ClimateEntity):
         if self._has_room_humidity_sensor is None:
             _LOGGER.debug("Attempt to check whether device has a room humidity sensor")
             try:
-                humidity_sensor = await self.GreeGetValues(["DwatSen"])
+                humidity_sensor = await self.GreeGetValues(["DwatSen"], max_retries=max_retries)
             except Exception:
                 _LOGGER.debug("Could not determine whether device has a room humidity sensor. Retrying at next update()")
             else:
@@ -681,18 +691,26 @@ class GreeClimate(ClimateEntity):
         optionsToFetch = self._optionsToFetch
 
         try:
-            currentValues = await self.GreeGetValues(optionsToFetch)
+            currentValues = await self.GreeGetValues(optionsToFetch, max_retries=max_retries)
         except Exception as e:
-            _LOGGER.warning(f"{self._name}: Failed to communicate with device {self._ip_addr}:{self._port}: {str(e)}")
+            # A portable unit that spends long periods unplugged is offline,
+            # which is its expected state, not a fault. Warn once when a
+            # previously reachable unit goes away, then stay quiet: repeating
+            # the same warning every scan turns an expected absence into log
+            # noise. Recovery is announced below.
+            level = _LOGGER.debug if self._device_online is False else _LOGGER.warning
+            level(f"{self._name}: Failed to communicate with device {self._ip_addr}:{self._port}: {str(e)}")
             if not self._disable_available_check:
-                _LOGGER.info(f"{self._name}: Device marked offline after failed communication")
                 self._device_online = False
             self._handle_comms_failure()
         else:
             self._consecutive_update_failures = 0
             if not self._disable_available_check:
-                if not self._device_online:
-                    self._device_online = True
+                if self._device_online is False:
+                    _LOGGER.info(
+                        f"{self._name}: Device is reachable again at {self._ip_addr}:{self._port}"
+                    )
+                self._device_online = True
             # Set latest status from device
             self._acOptions = self.SetAcOptions(self._acOptions, optionsToFetch, currentValues)
 
@@ -808,23 +826,35 @@ class GreeClimate(ClimateEntity):
     async def async_update(self):
         """Retrieve latest state."""
         _LOGGER.debug("async_update()")
+        # A unit already known to be offline is almost certainly just
+        # unplugged. Probe it with a single attempt instead of the full retry
+        # budget: the update then finishes in a few seconds (well below HA's
+        # 10-second slow-update warning) and the unit is still noticed as soon
+        # as it comes back. The same applies on startup, before a poll has
+        # confirmed it is online. While it is running, the normal 8 attempts
+        # apply, and commands always use the full budget.
+        retries = 8 if self._device_online is True else 1
         if not self._encryption_key:
             if self.encryption_version == 1:
-                key = await GetDeviceKey(self._mac_addr, self._ip_addr, self._port)
+                key = await GetDeviceKey(self._mac_addr, self._ip_addr, self._port, max_retries=retries)
                 if key:
                     self._encryption_key = key
                     self.CIPHER = AES.new(self._encryption_key, AES.MODE_ECB)
-                    await self.SyncState()
+                    await self.SyncState(max_retries=retries)
+                elif not self._disable_available_check:
+                    self._device_online = False
             elif self.encryption_version == 2:
-                key = await GetDeviceKeyGCM(self._mac_addr, self._ip_addr, self._port)
+                key = await GetDeviceKeyGCM(self._mac_addr, self._ip_addr, self._port, max_retries=retries)
                 if key:
                     self._encryption_key = key
                     self.CIPHER = GetGCMCipher(self._encryption_key)
-                    await self.SyncState()
+                    await self.SyncState(max_retries=retries)
+                elif not self._disable_available_check:
+                    self._device_online = False
             else:
                 _LOGGER.error("Encryption version %s is not implemented." % self.encryption_version)
         else:
-            await self.SyncState()
+            await self.SyncState(max_retries=retries)
 
     @property
     def name(self):
