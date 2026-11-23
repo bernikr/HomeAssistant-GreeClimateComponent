@@ -1,5 +1,16 @@
 [![hacs_badge](https://img.shields.io/badge/HACS-Default-orange.svg?style=for-the-badge)](https://github.com/hacs/integration) [![Join our Discord](https://img.shields.io/badge/Discord-Join%20the%20chat-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/JPcBkvRhTS)
 
+> **This is a fork.** `bernikr/HomeAssistant-GreeClimateComponent` is
+> `RobHofmann/HomeAssistant-GreeClimateComponent` plus a small patch on `master`
+> that quiets polling for a portable unit that is unplugged most of the time:
+> a poll uses at most two attempts (one while the unit is known offline or has not
+> been confirmed online yet) instead of the full retry budget, an expected offline
+> unit logs one warning instead of one per poll, and that single-attempt liveness
+> poll never logs an error -- not even while the module is still booting. Commands
+> still use the full budget.
+> Tags keep the upstream version plus a patch revision (`4.0.16.3`). A scheduled
+> workflow merges each upstream release and publishes the matching fork release.
+
 # HomeAssistant-GreeClimateComponent
 Custom Gree climate component written in Python3 for Home Assistant. Controls ACs supporting the Gree protocol.
 
